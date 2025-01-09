@@ -1,5 +1,7 @@
 package main
 
+import "encoding/hex"
+
 type MerkleTree struct {
 	tree *Node
 }
@@ -31,11 +33,13 @@ func NewDefaultMerkleTree(data []string) *MerkleTree {
 	return NewMerkleTree(data, DefaultHashFunc)
 }
 
-func generateLeaves(data []string) []*Node {
-	leaves := make([]*Node, len(data))
-	for i, d := range data {
-		hash := DoubleSHA256([]byte(d))
-		leaves[i] = &Node{hash: hash}
+func generateLeaves(txids []string) []*Node {
+	leaves := make([]*Node, len(txids))
+	for i, txid := range txids {
+		// Convert hex string to bytes and reverse (Bitcoin's internal format)
+		bytes, _ := hex.DecodeString(txid)
+		bytes = reverseBytes(bytes)
+		leaves[i] = &Node{hash: hex.EncodeToString(bytes)}
 	}
 	return leaves
 }
@@ -45,14 +49,20 @@ func generateTree(leaves []*Node, hashFunc HashFunc) *Node {
 		return leaves[0]
 	}
 
-	// handle odd number of leaves
+	// handle odd number of leaves by duplicating last one
 	if len(leaves)%2 != 0 {
 		leaves = append(leaves, leaves[len(leaves)-1])
 	}
 
 	var parents []*Node
 	for i := 0; i < len(leaves); i += 2 {
-		combinedHash := DoubleSHA256(append([]byte(leaves[i].hash), []byte(leaves[i+1].hash)...))
+		leftBytes, _ := hex.DecodeString(leaves[i].hash)
+		rightBytes, _ := hex.DecodeString(leaves[i+1].hash)
+
+		// Concatenate the bytes and perform double SHA256
+		combined := append(leftBytes, rightBytes...)
+		combinedHash := DoubleSHA256(combined)
+
 		parent := &Node{hash: combinedHash, left: leaves[i], right: leaves[i+1]}
 		parents = append(parents, parent)
 	}
@@ -60,19 +70,11 @@ func generateTree(leaves []*Node, hashFunc HashFunc) *Node {
 	return generateTree(parents, hashFunc)
 }
 
-// func generateRecursiveTree(leaves []*Node, hash HashFunc) *Node {
-// 	if len(leaves)%2 == 1 {
-// 		return leaves[len(leaves)-1]
-// 	}
-
-// 	if len(leaves) == 2 {
-// 		return NewNode(leaves[0].hash+leaves[1].hash, leaves[0], leaves[1])
-// 	}
-
-// 	mid := len(leaves) / 2
-// 	left := generateRecursiveTree(leaves[:mid], hash)
-// 	right := generateRecursiveTree(leaves[mid:], hash)
-// 	generatedHash, _ := hash(left.hash, right.hash)
-
-// 	return NewNode(generatedHash, left, right)
-// }
+// Bitcoin uses little-endian byte order, so we need to reverse the bytes
+func reverseBytes(b []byte) []byte {
+	for i := 0; i < len(b)/2; i++ {
+		j := len(b) - 1 - i
+		b[i], b[j] = b[j], b[i]
+	}
+	return b
+}

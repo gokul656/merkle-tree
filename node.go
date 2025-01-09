@@ -8,6 +8,7 @@ import (
 
 type HashFunc func(...string) (string, error)
 
+// DoubleSHA256 performs Bitcoin-style double SHA-256 hashing
 func DoubleSHA256(data []byte) string {
 	hash1 := sha256.Sum256(data)
 	hash2 := sha256.Sum256(hash1[:])
@@ -17,20 +18,23 @@ func DoubleSHA256(data []byte) string {
 func DefaultHashFunc(data ...string) (string, error) {
 	b := strings.Builder{}
 	for _, d := range data {
-		hashString := DoubleSHA256([]byte(d))
+		bytes, _ := hex.DecodeString(d)
+		hashString := DoubleSHA256(bytes)
 		b.WriteString(hashString)
 	}
 	return b.String(), nil
 }
 
 type Node struct {
-	hash  string
+	hash  string // Stored in hex format
 	left  *Node
 	right *Node
 }
 
 func (n *Node) RootHash() string {
-	return n.hash
+	bytes, _ := hex.DecodeString(n.hash)
+	bytes = reverseBytes(bytes)
+	return hex.EncodeToString(bytes)
 }
 
 func (n Node) Clone() *Node {
